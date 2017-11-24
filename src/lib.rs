@@ -25,12 +25,12 @@ pub enum Outcome<T, P> {
 pub type PanicResult<T, P> = thread::Result<Outcome<T, P>>;
 
 #[derive(Debug)]
-pub struct JoinHandle<T, P> {
+pub struct Handle<T, P> {
     thread_handle: thread::JoinHandle<T>,
     phantom: marker::PhantomData<P>
 }
 
-impl<T, P: Any> JoinHandle<T, P> {
+impl<T, P: Any> Handle<T, P> {
     pub fn join(self) -> PanicResult<T, P> {
         match self.thread_handle.join() {
             Ok(rv) => Ok(Outcome::NoPanic(rv)),
@@ -42,16 +42,19 @@ impl<T, P: Any> JoinHandle<T, P> {
             }
         }
     }
+
+    pub fn as_thread_join_handle(&self) -> &thread::JoinHandle<T> { &self.thread_handle }
+    pub fn into_thread_join_handle(self) -> thread::JoinHandle<T> { self.thread_handle }
 }
 
-pub fn spawn<T, P, F>(f: F) -> JoinHandle<T, P>
+pub fn spawn<T, P, F>(f: F) -> Handle<T, P>
     where F: FnOnce() -> T,
           F: Send + 'static,
           T: Send + 'static,
           P: Any
 {
     let thread_handle = thread::spawn(f);
-    JoinHandle {
+    Handle {
         thread_handle: thread_handle,
         phantom: marker::PhantomData
     }
@@ -69,7 +72,7 @@ pub fn chain_hook_ignoring<P: 'static>() {
 #[cfg(test)]
 mod tests {
     use super::spawn;
-    use super::{JoinHandle, Outcome};
+    use super::{Handle, Outcome};
     use super::chain_hook_ignoring;
     use std::sync::{Once, ONCE_INIT};
 
@@ -86,7 +89,7 @@ mod tests {
     #[test]
     fn expected_panic() {
         ignore_expected_panics();
-        let h: JoinHandle<(), Expected> = spawn(|| {
+        let h: Handle<(), Expected> = spawn(|| {
             panic!(Expected(42));
         });
         let outcome = h.join().unwrap();
@@ -100,7 +103,7 @@ mod tests {
             chain_hook_ignoring::<i32>();
         });
 
-        let h: JoinHandle<(), u32> = spawn(|| {
+        let h: Handle<(), u32> = spawn(|| {
             panic!(42);
         });
         // This wouldn't work:
