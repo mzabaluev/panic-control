@@ -11,6 +11,8 @@ use std::panic;
 use std::thread;
 use std::marker;
 use std::any::Any;
+use std::fmt;
+use std::fmt::Debug;
 
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -21,10 +23,15 @@ pub enum Outcome<T, P> {
 
 pub type ControlledPanicResult<T, P> = thread::Result<Outcome<T, P>>;
 
-#[derive(Debug)]
 pub struct ControlledJoinHandle<T, P> {
     thread_handle: thread::JoinHandle<T>,
     phantom: marker::PhantomData<P>
+}
+
+impl<T, P> Debug for ControlledJoinHandle<T, P> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("ControlledJoinHandle { .. }")
+    }
 }
 
 impl<T, P: Any> ControlledJoinHandle<T, P> {
@@ -47,6 +54,15 @@ impl<T, P: Any> ControlledJoinHandle<T, P> {
 pub struct Context<P> {
     thread_builder: thread::Builder,
     phantom: marker::PhantomData<P>
+}
+
+impl<P> Debug for Context<P>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Context")
+            .field("thread_builder", &self.thread_builder)
+            .finish()
+    }
 }
 
 impl<P: Any> Context<P> {
@@ -162,6 +178,19 @@ mod tests {
             assert_eq!(name.unwrap(), THREAD_NAME);
             42
         });
+        h.join().unwrap();
+    }
+
+    #[test]
+    fn debug_impls_omit_phantom() {
+        let ctx = Context::<Expected>::new();
+        let repr = format!("{:?}", ctx);
+        assert!(repr.starts_with("Context"));
+        assert!(!repr.contains("phantom"));
+        assert!(!repr.contains("PhantomData"));
+        let h = ctx.spawn(|| { });
+        let repr = format!("{:?}", h);
+        assert_eq!(repr, "ControlledJoinHandle { .. }");
         h.join().unwrap();
     }
 }
