@@ -57,63 +57,35 @@ pub fn spawn<T, P, F>(f: F) -> JoinHandle<T, P>
     }
 }
 
-fn report_unexpected_panic(info: &panic::PanicInfo) {
-    use std::io;
-    use std::io::Write;
-
-    let thread = thread::current();
-    let name = thread.name().unwrap_or("<unnamed>");
-    let msg = if let Some(s) = info.payload().downcast_ref::<&'static str>() {
-        *s
-    } else if let Some(s) = info.payload().downcast_ref::<String>() {
-        &s[..]
-    } else {
-        "Box<Any>"
-    };
-    match info.location() {
-        Some(loc) => {
-            let file = loc.file();
-            let line = loc.line();
-            let _ = writeln!(
-                    io::stderr(),
-                    "unexpected panic occurred in thread '{}' at '{}', {}:{}",
-                    name, msg, file, line);
-        }
-        None => {
-            let _ = writeln!(
-                    io::stderr(),
-                    "unexpected panic occurred in thread '{}' at '{}'",
-                    name, msg);
-        }
-    }
-}
-
-pub fn set_hook_ignoring<P: 'static>() {
+pub fn chain_hook_ignoring<P: 'static>() {
+    let next_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
             if !info.payload().is::<P>() {
-                report_unexpected_panic(info);
+                next_hook(info);
             }
         }));
 }
-
-pub use panic::take_hook;
 
 #[cfg(test)]
 mod tests {
     use super::spawn;
     use super::{JoinHandle, Outcome};
-    use std::panic;
-
-    fn shut_up_panic_hook() {
-        panic::set_hook(Box::new(|_| { }));
-    }
+    use super::chain_hook_ignoring;
+    use std::sync::{Once, ONCE_INIT};
 
     #[derive(Debug, PartialEq, Eq)]
     struct Expected(pub u32);
 
+    fn ignore_expected_panics() {
+        static GUARD: Once = ONCE_INIT;
+        GUARD.call_once(|| {
+            chain_hook_ignoring::<Expected>()
+        });
+    }
+
     #[test]
     fn expected_panic() {
-        shut_up_panic_hook();
+        ignore_expected_panics();
         let h: JoinHandle<(), Expected> = spawn(|| {
             panic!(Expected(42));
         });
@@ -123,11 +95,15 @@ mod tests {
 
     #[test]
     fn int_literal_gotcha() {
-        shut_up_panic_hook();
+        static GUARD: Once = ONCE_INIT;
+        GUARD.call_once(|| {
+            chain_hook_ignoring::<i32>();
+        });
+
         let h: JoinHandle<(), u32> = spawn(|| {
             panic!(42);
         });
-        // You probably assumed this would work:
+        // This wouldn't work:
         //     let outcome = h.join().unwrap();
         //     assert_eq!(outcome, Outcome::Panicked(42));
         let res = h.join();
