@@ -19,7 +19,7 @@ pub enum Outcome<T, P> {
     Panicked(P)
 }
 
-pub type PanicResult<T, P> = thread::Result<Outcome<T, P>>;
+pub type ControlledPanicResult<T, P> = thread::Result<Outcome<T, P>>;
 
 #[derive(Debug)]
 pub struct ControlledJoinHandle<T, P> {
@@ -28,7 +28,7 @@ pub struct ControlledJoinHandle<T, P> {
 }
 
 impl<T, P: Any> ControlledJoinHandle<T, P> {
-    pub fn join(self) -> PanicResult<T, P> {
+    pub fn join(self) -> ControlledPanicResult<T, P> {
         match self.thread_handle.join() {
             Ok(rv) => Ok(Outcome::NoPanic(rv)),
             Err(box_any) => {
