@@ -7,12 +7,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![crate_name = "panic_control"]
 #![crate_type = "lib"]
 
 use std::panic;
 use std::thread;
 use std::marker;
 use std::any::Any;
+
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Outcome<T, P> {
