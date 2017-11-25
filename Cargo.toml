@@ -7,3 +7,6 @@ readme = "README.md"
 license = "Apache-2.0/MIT"
 categories = ["development-tools::testing"]
 keywords = ["panic", "testing"]
+
+[lib]
+path = "src/panic_control.rs"
