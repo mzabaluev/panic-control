@@ -7,12 +7,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::panic;
-use std::thread;
-use std::marker;
 use std::any::Any;
+use std::cell::Cell;
 use std::fmt;
 use std::fmt::Debug;
+use std::marker;
+use std::panic;
+use std::panic::{PanicInfo};
+use std::thread;
+use std::sync::{Once, ONCE_INIT};
 
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -136,19 +139,69 @@ impl<T> ThreadResultExt<T> for thread::Result<T> {
 }
 
 pub fn chain_hook_ignoring<P: 'static>() {
+    chain_hook_ignoring_if(|_: &P| { true })
+}
+
+pub fn chain_hook_ignoring_if<P, F>(predicate: F)
+    where F: Fn(&P) -> bool,
+          F: Send,
+          F: Sync,
+          F: 'static,
+          P: 'static
+{
+    chain_hook_ignoring_full(move |info| {
+        match info.payload().downcast_ref::<P>() {
+            Some(p) => predicate(p),
+            None => false
+        }
+    })
+}
+
+pub fn chain_hook_ignoring_full<F>(predicate: F)
+    where F: Fn(&PanicInfo) -> bool,
+          F: Send,
+          F: Sync,
+          F: 'static
+{
     let next_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
-            if !info.payload().is::<P>() {
+            if !predicate(info) {
                 next_hook(info);
             }
         }));
 }
 
+thread_local!(static IGNORE_HOOK: Cell<bool> = Cell::new(false));
+
+fn init_thread_filter_hook() {
+    static HOOK_ONCE: Once = ONCE_INIT;
+    HOOK_ONCE.call_once(|| {
+        chain_hook_ignoring_full(|_| {
+            IGNORE_HOOK.with(|cell| { cell.get() })
+        });
+    });
+}
+
+pub fn disable_hook_in_current_thread() {
+    init_thread_filter_hook();
+    IGNORE_HOOK.with(|cell| {
+        cell.set(true);
+    });
+}
+
+pub fn enable_hook_in_current_thread() {
+    init_thread_filter_hook();
+    IGNORE_HOOK.with(|cell| {
+        cell.set(false);
+    });
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::{Context, Outcome};
     use super::{ThreadResultExt};
-    use super::chain_hook_ignoring;
+    use super::{chain_hook_ignoring, disable_hook_in_current_thread};
     use std::sync::{Once, ONCE_INIT};
     use std::thread;
 
@@ -190,12 +243,8 @@ mod tests {
 
     #[test]
     fn int_literal_gotcha() {
-        static GUARD: Once = ONCE_INIT;
-        GUARD.call_once(|| {
-            chain_hook_ignoring::<i32>();
-        });
-
         let h = Context::<u32>::new().spawn(|| {
+            disable_hook_in_current_thread();
             panic!(42);
         });
         // This wouldn't work:
