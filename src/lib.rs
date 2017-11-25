@@ -95,6 +95,46 @@ impl<P: Any> From<thread::Builder> for Context<P> {
     }
 }
 
+pub trait ThreadResultExt<T> {
+    fn unwrap_or_propagate(self) -> T;
+    fn panic_value_as_str(&self) -> Option<&str>;
+}
+
+fn str_from_any(something: &Any) -> Option<&str> {
+    match something.downcast_ref::<&'static str>() {
+        Some(s) => Some(*s),
+        None => match something.downcast_ref::<String>() {
+            Some(s) => Some(&s[..]),
+            None    => None
+        }
+    }
+}
+
+fn propagate_panic(box_any: Box<Any + Send>) -> ! {
+    match str_from_any(box_any.as_ref()) {
+        Some(s) => panic!("observed an unexpected thread panic: {}", s),
+        None => panic!("observed an unexpected thread panic \
+                        with undetermined value")
+    }
+}
+
+impl<T> ThreadResultExt<T> for thread::Result<T> {
+
+    fn unwrap_or_propagate(self) -> T {
+        match self {
+            Ok(rv) => rv,
+            Err(e) => propagate_panic(e)
+        }
+    }
+
+    fn panic_value_as_str(&self) -> Option<&str> {
+        match *self {
+            Ok(_) => None,
+            Err(ref ref_box_any) => str_from_any(&**ref_box_any)
+        }
+    }
+}
+
 pub fn chain_hook_ignoring<P: 'static>() {
     let next_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
@@ -107,6 +147,7 @@ pub fn chain_hook_ignoring<P: 'static>() {
 #[cfg(test)]
 mod tests {
     use super::{Context, Outcome};
+    use super::{ThreadResultExt};
     use super::chain_hook_ignoring;
     use std::sync::{Once, ONCE_INIT};
     use std::thread;
@@ -178,7 +219,7 @@ mod tests {
             assert_eq!(name.unwrap(), THREAD_NAME);
             42
         });
-        h.join().unwrap();
+        h.join().unwrap_or_propagate();
     }
 
     #[test]
