@@ -87,6 +87,17 @@ impl<P: Any> Context<P> {
             phantom: self.phantom
         }
     }
+
+    pub fn spawn_quiet<T, F>(self, f: F) -> ControlledJoinHandle<T, P>
+        where F: FnOnce() -> T,
+              F: Send + 'static,
+              T: Send + 'static
+    {
+        self.spawn(|| {
+            disable_hook_in_current_thread();
+            f()
+        })
+    }
 }
 
 impl<P: Any> From<thread::Builder> for Context<P> {
@@ -196,12 +207,23 @@ pub fn enable_hook_in_current_thread() {
     });
 }
 
+pub fn spawn_quiet<T, F>(f: F) -> thread::JoinHandle<T>
+    where F: FnOnce() -> T,
+          F: Send + 'static,
+          T: Send + 'static
+{
+    thread::spawn(|| {
+        disable_hook_in_current_thread();
+        f()
+    })
+}
+
 
 #[cfg(test)]
 mod tests {
     use super::{Context, Outcome};
     use super::{ThreadResultExt};
-    use super::{chain_hook_ignoring, disable_hook_in_current_thread};
+    use super::chain_hook_ignoring;
     use std::sync::{Once, ONCE_INIT};
     use std::thread;
 
@@ -243,8 +265,7 @@ mod tests {
 
     #[test]
     fn int_literal_gotcha() {
-        let h = Context::<u32>::new().spawn(|| {
-            disable_hook_in_current_thread();
+        let h = Context::<u32>::new().spawn_quiet(|| {
             panic!(42);
         });
         // This wouldn't work:
