@@ -208,6 +208,9 @@ impl<T, P: Any> CheckedJoinHandle<T, P> {
             }
         }
     }
+}
+
+impl<T, P> CheckedJoinHandle<T, P> {
 
     /// Returns a reference to the underlying `JoinHandle`.
     pub fn as_thread_join_handle(&self) -> &thread::JoinHandle<T> {
@@ -218,6 +221,18 @@ impl<T, P: Any> CheckedJoinHandle<T, P> {
     /// giving up panic discrimination.
     pub fn into_thread_join_handle(self) -> thread::JoinHandle<T> {
         self.thread_handle
+    }
+}
+
+impl<T, P> AsRef<thread::JoinHandle<T>> for CheckedJoinHandle<T, P> {
+    fn as_ref(&self) -> &thread::JoinHandle<T> {
+        self.as_thread_join_handle()
+    }
+}
+
+impl<T, P> Into<thread::JoinHandle<T>> for CheckedJoinHandle<T, P> {
+    fn into(self) -> thread::JoinHandle<T> {
+        self.into_thread_join_handle()
     }
 }
 
@@ -510,6 +525,62 @@ mod tests {
             42
         });
         h.join().unwrap_or_propagate();
+    }
+
+    #[test]
+    fn checked_join_handle_inherent_as_ref() {
+        const THREAD_NAME: &str = "a non-panicky thread";
+        let thread_builder = thread::Builder::new()
+                                .name(THREAD_NAME.into());
+        let ctx = Context::<Expected>::from(thread_builder);
+        let h = ctx.spawn(|| {});
+        {
+            let h = h.as_thread_join_handle();
+            let name = h.thread().name().unwrap();
+            assert_eq!(name, THREAD_NAME);
+        }
+        h.join().unwrap_or_propagate();
+    }
+
+    #[test]
+    fn checked_join_handle_trait_as_ref() {
+        const THREAD_NAME: &str = "a non-panicky thread";
+        let thread_builder = thread::Builder::new()
+                                .name(THREAD_NAME.into());
+        let ctx = Context::<Expected>::from(thread_builder);
+        let h = ctx.spawn(|| {});
+        {
+            let h: &thread::JoinHandle<()> = h.as_ref();
+            let name = h.thread().name().unwrap();
+            assert_eq!(name, THREAD_NAME);
+        }
+        h.join().unwrap_or_propagate();
+    }
+
+    #[test]
+    fn checked_join_handle_inherent_into() {
+        silence_expected_panics();
+        let ctx = Context::<Expected>::new();
+        let h = ctx.spawn(|| {
+            panic!(Expected(42));
+        });
+        let h = h.into_thread_join_handle();
+        let res = h.join();
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn checked_join_handle_trait_into() {
+        silence_expected_panics();
+        let ctx = Context::<Expected>::new();
+        #[allow(unreachable_code)]
+        let h = ctx.spawn(|| {
+            panic!(Expected(42));
+            ()
+        });
+        let h: thread::JoinHandle<()> = h.into();
+        let res = h.join();
+        assert!(res.is_err());
     }
 
     #[test]
