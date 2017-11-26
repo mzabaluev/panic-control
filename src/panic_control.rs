@@ -236,6 +236,39 @@ impl<T, P> Into<thread::JoinHandle<T>> for CheckedJoinHandle<T, P> {
     }
 }
 
+/// The launch pad for a thread checked for the expected panic type.
+///
+/// The generic type `Context` serves as the type system's anchor for the
+/// expected type of the panic value, which is given as the type parameter.
+/// It can be constructed from an `std::thread::Builder` providing
+/// a customized thread configuration.
+///
+/// The method `spawn()` is used to spawn a new thread similarly to
+/// how the function `std::thread::spawn()` works. See the documentation
+/// of the `spawn()` method for detailed description and examples.
+///
+/// # Examples
+///
+/// The example below demonstrates how to construct a `Context` from a
+/// configured `std::thread::Builder` using the implementation of
+/// the standard trait `From`.
+///
+/// ```
+/// use panic_control::Context;
+/// use std::thread;
+///
+/// #[derive(Debug, PartialEq, Eq)]
+/// struct ExpectedToken;
+///
+/// let thread_builder = thread::Builder::new()
+///                      .name("My panicky thread".into())
+///                      .stack_size(65 * 1024);
+/// let ctx = Context::<ExpectedToken>::from(thread_builder);
+/// let h = ctx.spawn(|| {
+///     // ...
+/// });
+/// h.join().unwrap();
+/// ```
 pub struct Context<P> {
     thread_builder: thread::Builder,
     phantom: marker::PhantomData<P>
@@ -251,6 +284,16 @@ impl<P> Debug for Context<P>
 }
 
 impl<P: Any> Context<P> {
+
+    /// Constructs a context with the default thread configuration.
+    ///
+    /// The type parameter can be specified explicitly:
+    ///
+    /// ```
+    /// # use panic_control::Context;
+    /// # #[derive(Debug, PartialEq)] struct Expected(pub i32);
+    /// let ctx = Context::<Expected>::new();
+    /// ```
     pub fn new() -> Context<P> {
         Context {
             thread_builder: thread::Builder::new(),
@@ -258,6 +301,19 @@ impl<P: Any> Context<P> {
         }
     }
 
+    /// Spawns a new thread taking ownership of the `Context`, and
+    /// returns the `CheckedJoinHandle` to the thread. This method behaves
+    /// exactly like the `spawn()` method of `std::thread::Builder` does,
+    /// and if the `Context` was constructed from `std::thread::Builder`,
+    /// will use its thread configuration, except that an OS failure to
+    /// create a thread will cause panic.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying call to `std::thread::Builder::spawn`
+    /// returns an `Err` value. Any panics that function can cause apply
+    /// as well.
+    ///
     /// # Examples
     ///
     /// The example below uses some kludges to work around a compiler
@@ -325,6 +381,34 @@ impl<P: Any> Context<P> {
         }
     }
 
+    /// Like `spawn()`, but suppresses calls to the current panic hook
+    /// if any panic occurs in the spawned thread.
+    ///
+    /// # Caveats
+    ///
+    /// Note that the suppression can apply to the default panic hook
+    /// that is normally used to report assertion failures and other
+    /// unexpected panics on the standard error stream.
+    /// The only remaining way to observe the panic is by checking
+    /// the result of `join()` for the spawned thread.
+    ///
+    /// If other Rust code in the process modifies the panic hook after
+    /// this method has been called, the suppression may be undone.
+    /// See the documentation on the function
+    /// `disable_hook_in_current_thread()` for possible pitfalls.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use panic_control::{Context, Outcome};
+    /// # #[derive(Debug, PartialEq)] struct Expected(pub i32);
+    /// let ctx = Context::<Expected>::new();
+    /// let h = ctx.spawn_quiet(|| {
+    ///     assert!(false, "you can only know about it through join()");
+    /// });
+    /// let res = h.join();
+    /// assert!(res.is_err());
+    /// ```
     pub fn spawn_quiet<T, F>(self, f: F) -> CheckedJoinHandle<T, P>
         where F: FnOnce() -> T,
               F: Send + 'static,
