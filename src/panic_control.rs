@@ -430,8 +430,71 @@ impl<P: Any> From<thread::Builder> for Context<P> {
     }
 }
 
+/// Helpful extension methods for `std::thread::Result`.
+///
+/// The `Result` type alias defined in `std::thread` is a
+/// specialization of the standard `Result` with a `Box<Any>`
+/// in the `Err` variant, which receives a panic's payload
+/// value.
+/// As such, `Result` does not provide convenient ways
+/// to examine the content of the panic value. Furthermore,
+/// the generic implementations of `unwrap()` and related methods
+/// use the `Debug` implementation of the content of `Err` to format
+/// the panic message, which is
+/// [not very useful](https://github.com/rust-lang/rfcs/issues/1389)
+/// in case of `Any`.
+///
+/// When this trait is used in a lexical scope, it augments
+/// any `Result` value that matches the specialization of
+/// `std::thread::Result` with methods that facilitate
+/// examination and reporting of the possible string value
+/// which is often found in the dynamically typed
+/// `Err` variant. The methods are meant to be used on the
+/// result of `std::thread::JoinHandle::join()` or
+/// `CheckedJoinHandle::join()`.
+///
+/// # Examples
+///
+/// ```
+/// use panic_control::ThreadResultExt;
+///
+/// use panic_control::Context;
+/// use std::thread;
+///
+/// let h = thread::spawn(|| {
+///     42
+/// });
+/// let n = h.join().unwrap_or_propagate();
+/// assert_eq!(n, 42);
+///
+/// #[derive(Debug, PartialEq, Eq)]
+/// struct Expected;
+///
+/// let ctx = Context::<Expected>::new();
+/// let h = ctx.spawn_quiet(|| {
+///     panic!("No coffee beans left in the bag!");
+/// });
+/// let res = h.join();
+/// let msg = res.panic_value_as_str().unwrap();
+/// println!("{}", msg);
+/// ```
+///
 pub trait ThreadResultExt<T> {
+
+    /// Unwraps a result, yielding the content of an `Ok`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is an `Err`, with a panic message appended with
+    /// the `Err`'s string value if that is found to be such, or a generic
+    /// message otherwise. The message is meant to relay information from
+    /// a panic in a child thread that is observed through this result value,
+    /// as returned by `std::thread::JoinHandle::join()` or
+    /// `CheckedJoinHandle::join()`.
     fn unwrap_or_propagate(self) -> T;
+
+    /// If the value is an `Err` and its content is a string, returns the
+    /// content as a string slice. Otherwise returns `None`.
     fn panic_value_as_str(&self) -> Option<&str>;
 }
 
