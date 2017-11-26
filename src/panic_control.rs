@@ -501,12 +501,12 @@ pub trait ThreadResultExt<T> {
 }
 
 fn str_from_any(something: &Any) -> Option<&str> {
-    match something.downcast_ref::<&'static str>() {
-        Some(s) => Some(*s),
-        None => match something.downcast_ref::<String>() {
-            Some(s) => Some(&s[..]),
-            None    => None
-        }
+    if let Some(s) = something.downcast_ref::<&'static str>() {
+        Some(*s)
+    } else if let Some(s) = something.downcast_ref::<String>() {
+        Some(&s[..])
+    } else {
+        None
     }
 }
 
