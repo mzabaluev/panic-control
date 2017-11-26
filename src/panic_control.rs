@@ -131,8 +131,6 @@ impl<T, P> Outcome<T, P> {
     }
 }
 
-pub type ControlledPanicResult<T, P> = thread::Result<Outcome<T, P>>;
-
 pub struct ControlledJoinHandle<T, P> {
     thread_handle: thread::JoinHandle<T>,
     phantom: marker::PhantomData<P>
@@ -145,7 +143,7 @@ impl<T, P> Debug for ControlledJoinHandle<T, P> {
 }
 
 impl<T, P: Any> ControlledJoinHandle<T, P> {
-    pub fn join(self) -> ControlledPanicResult<T, P> {
+    pub fn join(self) -> thread::Result<Outcome<T, P>> {
         match self.thread_handle.join() {
             Ok(rv) => Ok(Outcome::NoPanic(rv)),
             Err(box_any) => {
