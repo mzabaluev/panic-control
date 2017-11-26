@@ -7,6 +7,104 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+//! Controlled panics using dynamic type checking.
+//!
+//! Sometimes there is a need to test how Rust code behaves under unwinding,
+//! to which end a panic can be caused on purpose in a thread spawned by the
+//! test and the effects observed after the thread is joined.
+//! The problem with "benign" panics is that it may be cumbersome to tell them
+//! apart from panics indicating actual errors, such as assertion failures.
+//!
+//! Another issue is the default panic hook provided by the standard library.
+//! It is very useful for getting information about the cause of an
+//! unexpected thread panic, but for tests causing panics on purpose it
+//! creates annoying output noise. Custom panic hooks affect the entire
+//! program, which often is the test runner; it is easy to misuse them
+//! causing important panic information to go unreported.
+//!
+//! The simplest way, as provided by the standard library, to propagate
+//! a panic that occurred a spawned thread to the thread that spawned it
+//! is to call `unwrap` on the result of `JoinHandle::join`. Unfortunately,
+//! due to [an issue](https://github.com/rust-lang/rust/issues/46261) with
+//! the implementation of `Any`, the resulting panic message does not relay
+//! information from the inferior thread's panic.
+//!
+//! This crate provides utilities and an ergonomic interface for testing
+//! panics in a controlled and output-friendly way using dynamic type checks
+//! to discern between expected and unexpected panics.
+//!
+//! # Expected Panic Type
+//!
+//! The recommended way to designate panics as expected is by using values of
+//! a custom type as the parameter for `panic!`. The type could be as simple
+//! as a token unit-like struct, or it can be equipped to carry additional
+//! information from the panic site.
+//! Any panic value type shall be sized, static, and `Send`. For the value
+//! to be usable in testing, it should also implement at least `Debug` and
+//! `PartialEq`.
+//!
+//! # Example
+//!
+//! ```
+//! use panic_control::{Context, Outcome};
+//! use panic_control::{chain_hook_ignoring, spawn_quiet};
+//! use panic_control::ThreadResultExt;
+//!
+//! use std::thread;
+//!
+//! #[derive(Debug, PartialEq, Eq)]
+//! enum Expected {
+//!     Token,
+//!     Int(i32),
+//!     String(String)
+//! }
+//!
+//! // Rust's stock test runner does not provide a way to do global
+//! // initialization and the tests are run in parallel in a random
+//! // order by default. So this is our solution, to be called from
+//! // every test exercising a panic with an Expected value.
+//! fn silence_expected_panics() {
+//!     use std::sync::{Once, ONCE_INIT};
+//!     static HOOK_ONCE: Once = ONCE_INIT;
+//!     HOOK_ONCE.call_once(|| {
+//!         chain_hook_ignoring::<Expected>()
+//!     });
+//! }
+//!
+//! # struct TypeUnderTest;
+//! # impl TypeUnderTest {
+//! #     fn new() -> TypeUnderTest { TypeUnderTest }
+//! #     fn doing_fine(&self) -> bool { true }
+//! # }
+//! // ...
+//!
+//! silence_expected_panics();
+//! let thread_builder = thread::Builder::new()
+//!                      .name("My panicky thread".into());
+//! let ctx = Context::<Expected>::from(thread_builder);
+//! let h = ctx.spawn(|| {
+//!     let unwind_me = TypeUnderTest::new();
+//!     assert!(unwind_me.doing_fine());
+//!          // ^-- If this fails, join will return Err
+//!     panic!(Expected::Token);
+//!     ()
+//! });
+//! let outcome = h.join().unwrap_or_propagate();
+//! assert_eq!(outcome, Outcome::Panicked(Expected::Token));
+//!
+//! let h = Context::<Expected>::new().spawn_quiet(|| {
+//!     let h = spawn_quiet(|| {
+//!         panic!("Sup dawg, we heard you like panics \
+//!                 so we put a panic in your panic!");
+//!     });
+//!     h.join().unwrap_or_propagate();
+//! });
+//! let res = h.join();
+//! let msg = res.panic_value_as_str().unwrap();
+//! assert!(msg.contains("panic in your panic"));
+//! ```
+
 use std::any::Any;
 use std::cell::Cell;
 use std::fmt;
