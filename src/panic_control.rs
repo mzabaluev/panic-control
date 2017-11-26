@@ -123,7 +123,7 @@ use std::sync::{Once, ONCE_INIT};
 /// Enumerates the expected outcomes from joining a controlled thread.
 ///
 /// `Outcome` values are returned in the successful result variant
-/// of the `join` method of a `ControlledJoinHandle`.
+/// of the `join` method of a `CheckedJoinHandle`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Outcome<T, P> {
     /// Indicates that the thread closure has
@@ -146,25 +146,33 @@ impl<T, P> Outcome<T, P> {
 
 /// Wraps `std::thread::JoinHandle` for panic value discrimination.
 ///
-/// A `ControlledJoinHandle` works like a standard `JoinHandle`,
-/// except that its `join` method checks the type of the possible panic
-/// value for a dynamic type downcast to the expected panic type.
-pub struct ControlledJoinHandle<T, P> {
+/// A `CheckedJoinHandle` works like a standard `JoinHandle`,
+/// except that its `join()` method checks the type of the possible
+/// panic value dynamically for a downcast to the type that is the
+/// parameter of the `Context` this handle was obtained from,
+/// and if the type matches, returns the resolved value in the
+/// "successful panic" result variant.
+///
+/// See the documentation of the `join()` method for details and
+/// an example of use.
+pub struct CheckedJoinHandle<T, P> {
     thread_handle: thread::JoinHandle<T>,
     phantom: marker::PhantomData<P>
 }
 
-impl<T, P> Debug for ControlledJoinHandle<T, P> {
+impl<T, P> Debug for CheckedJoinHandle<T, P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("ControlledJoinHandle { .. }")
+        f.write_str("CheckedJoinHandle { .. }")
     }
 }
 
-impl<T, P: Any> ControlledJoinHandle<T, P> {
+impl<T, P: Any> CheckedJoinHandle<T, P> {
 
     /// Works like `std::thread::JoinHandle::join()`, except that when
     /// the child thread's panic value is of the expected type, it is
-    /// returned in an `Ok(Outcome::Panicked(_))`.
+    /// returned in `Ok(Outcome::Panicked(_))`. If the child thread's
+    /// closure returns normally, its return value is returned in
+    /// `Ok(Outcome::NoPanic(_))`
     ///
     /// # Example
     ///
@@ -290,19 +298,19 @@ impl<P: Any> Context<P> {
     ///     _ => panic!("join() returned an unexpected Outcome value")
     /// }
     /// ```
-    pub fn spawn<T, F>(self, f: F) -> ControlledJoinHandle<T, P>
+    pub fn spawn<T, F>(self, f: F) -> CheckedJoinHandle<T, P>
         where F: FnOnce() -> T,
               F: Send + 'static,
               T: Send + 'static
     {
         let thread_handle = self.thread_builder.spawn(f).unwrap();
-        ControlledJoinHandle {
+        CheckedJoinHandle {
             thread_handle: thread_handle,
             phantom: self.phantom
         }
     }
 
-    pub fn spawn_quiet<T, F>(self, f: F) -> ControlledJoinHandle<T, P>
+    pub fn spawn_quiet<T, F>(self, f: F) -> CheckedJoinHandle<T, P>
         where F: FnOnce() -> T,
               F: Send + 'static,
               T: Send + 'static
@@ -513,7 +521,7 @@ mod tests {
         assert!(!repr.contains("PhantomData"));
         let h = ctx.spawn(|| { });
         let repr = format!("{:?}", h);
-        assert_eq!(repr, "ControlledJoinHandle { .. }");
+        assert_eq!(repr, "CheckedJoinHandle { .. }");
         h.join().unwrap();
     }
 }
