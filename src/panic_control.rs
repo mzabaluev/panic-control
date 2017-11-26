@@ -122,6 +122,15 @@ pub enum Outcome<T, P> {
     Panicked(P)
 }
 
+impl<T, P> Outcome<T, P> {
+    pub fn has_panicked(&self) -> bool {
+        match *self {
+            Outcome::NoPanic(_) => false,
+            Outcome::Panicked(_) => true,
+        }
+    }
+}
+
 pub type ControlledPanicResult<T, P> = thread::Result<Outcome<T, P>>;
 
 pub struct ControlledJoinHandle<T, P> {

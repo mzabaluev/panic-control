@@ -59,9 +59,14 @@ mod unwrap_or_propagate {
 
     #[test]
     fn no_panic() {
-        let h = thread::spawn(|| { 42 });
-        let res = h.join();
-        assert_eq!(res.unwrap_or_propagate(), 42);
+        let h = Context::<String>::new().spawn(|| { 42 });
+        let outcome = h.join().unwrap_or_propagate();
+        assert!(!outcome.has_panicked());
+        if let Outcome::NoPanic(rv) = outcome {
+            assert_eq!(rv, 42);
+        } else {
+            panic!("Outcome::has_panicked() did not return the expected value");
+        }
     }
 
     #[test]
@@ -105,9 +110,13 @@ mod unwrap_or_propagate {
         });
         let res = h.join();
         match res {
-            Ok(Outcome::NoPanic(_)) => panic!("thread was expected to panic"),
-            Ok(Outcome::Panicked(s)) => {
-                assert!(s.ends_with(TEST_STR));
+            Ok(outcome) => {
+                assert!(outcome.has_panicked());
+                if let Outcome::Panicked(s) = outcome {
+                    assert!(s.ends_with(TEST_STR));
+                } else {
+                    panic!("Outcome::has_panicked() did not return the expected value");
+                }
             }
             Err(_) => panic!("unexpected panic occurred: {}",
                              res.panic_value_as_str()
