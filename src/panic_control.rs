@@ -116,13 +116,22 @@ use std::thread;
 use std::sync::{Once, ONCE_INIT};
 
 
+/// Enumerates the expected outcomes from joining a controlled thread.
+///
+/// `Outcome` values are returned in the successful result variant
+/// of the `join` method of a `ControlledJoinHandle`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Outcome<T, P> {
+    /// Indicates that the thread closure has
+    /// returned normally and provides the return value.
     NoPanic(T),
+    /// Indicates that the thread has panicked with expected parameter type
+    /// and provides the panic value.
     Panicked(P)
 }
 
 impl<T, P> Outcome<T, P> {
+    /// Tests whether the value contains the variant `Panicked`.
     pub fn has_panicked(&self) -> bool {
         match *self {
             Outcome::NoPanic(_) => false,
@@ -131,6 +140,11 @@ impl<T, P> Outcome<T, P> {
     }
 }
 
+/// Wraps `std::thread::JoinHandle` for panic value discrimination.
+///
+/// A `ControlledJoinHandle` works like a standard `JoinHandle`,
+/// except that its `join` method checks the type of the possible panic
+/// value for a dynamic type downcast to the expected panic type.
 pub struct ControlledJoinHandle<T, P> {
     thread_handle: thread::JoinHandle<T>,
     phantom: marker::PhantomData<P>
@@ -143,6 +157,35 @@ impl<T, P> Debug for ControlledJoinHandle<T, P> {
 }
 
 impl<T, P: Any> ControlledJoinHandle<T, P> {
+
+    /// Works like `std::thread::JoinHandle::join()`, except that when
+    /// the child thread's panic value is of the expected type, it is
+    /// returned in an `Ok(Outcome::Panicked(_))`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use panic_control::{Context, Outcome};
+    /// use std::thread;
+    ///
+    /// #[derive(Debug, PartialEq, Eq)]
+    /// struct Expected(pub u32);
+    ///
+    /// let ctx = Context::<Expected>::new();
+    ///
+    /// // Have to help the compiler here: without the unreachable
+    /// // return value, it will default the first type parameter of
+    /// // Outcome to ! when feature(never_type) lands, but for now
+    /// // it lints on Rust issue #39216.
+    /// #[allow(unreachable_code)]
+    /// let h = ctx.spawn(|| {
+    ///     panic!(Expected(42));
+    ///     ()
+    /// });
+    ///
+    /// let outcome = h.join().unwrap();
+    /// assert_eq!(outcome, Outcome::Panicked(Expected(42)));
+    /// ```
     pub fn join(self) -> thread::Result<Outcome<T, P>> {
         match self.thread_handle.join() {
             Ok(rv) => Ok(Outcome::NoPanic(rv)),
@@ -155,8 +198,16 @@ impl<T, P: Any> ControlledJoinHandle<T, P> {
         }
     }
 
-    pub fn as_thread_join_handle(&self) -> &thread::JoinHandle<T> { &self.thread_handle }
-    pub fn into_thread_join_handle(self) -> thread::JoinHandle<T> { self.thread_handle }
+    /// Returns a reference to the underlying `JoinHandle`.
+    pub fn as_thread_join_handle(&self) -> &thread::JoinHandle<T> {
+        &self.thread_handle
+    }
+
+    /// Converts into the underlying `JoinHandle`,
+    /// giving up panic discrimination.
+    pub fn into_thread_join_handle(self) -> thread::JoinHandle<T> {
+        self.thread_handle
+    }
 }
 
 pub struct Context<P> {
