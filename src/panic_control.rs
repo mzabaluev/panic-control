@@ -16,19 +16,19 @@
 //! The problem with "benign" panics is that it may be cumbersome to tell them
 //! apart from panics indicating actual errors, such as assertion failures.
 //!
-//! Another issue is the default panic hook provided by the standard library.
+//! Another issue is the behavior of the default panic hook.
 //! It is very useful for getting information about the cause of an
 //! unexpected thread panic, but for tests causing panics on purpose it
 //! creates annoying output noise. Custom panic hooks affect the entire
 //! program, which often is the test runner; it is easy to misuse them
-//! causing important panic information to go unreported.
+//! causing important error information to go unreported.
 //!
 //! The simplest way, as provided by the standard library, to propagate
-//! a panic that occurred a spawned thread to the thread that spawned it
+//! a panic that occurred in a child thread to the thread that spawned it
 //! is to call `unwrap` on the result of `JoinHandle::join`. Unfortunately,
-//! due to [an issue](https://github.com/rust-lang/rust/issues/46261) with
+//! due to [an issue](https://github.com/rust-lang/rfcs/issues/1389) with
 //! the implementation of `Any`, the resulting panic message does not relay
-//! information from the inferior thread's panic.
+//! information from the child thread's panic.
 //!
 //! This crate provides utilities and an ergonomic interface for testing
 //! panics in a controlled and output-friendly way using dynamic type checks
@@ -62,8 +62,9 @@
 //!
 //! // Rust's stock test runner does not provide a way to do global
 //! // initialization and the tests are run in parallel in a random
-//! // order by default. So this is our solution, to be called from
-//! // every test exercising a panic with an Expected value.
+//! // order by default. So this is our solution, to be called at
+//! // the beginning of every test exercising a panic with an
+//! // Expected value.
 //! fn silence_expected_panics() {
 //!     use std::sync::{Once, ONCE_INIT};
 //!     static HOOK_ONCE: Once = ONCE_INIT;
@@ -86,7 +87,7 @@
 //! let h = ctx.spawn(|| {
 //!     let unwind_me = TypeUnderTest::new();
 //!     assert!(unwind_me.doing_fine());
-//!          // ^-- If this fails, join will return Err
+//!          // ^-- If this fails, join() will return Err
 //!     panic!(Expected::String("Rainbows and unicorns!".into()));
 //! });
 //! let outcome = h.join().unwrap_or_propagate();
@@ -97,7 +98,8 @@
 //!     _ => panic!("unexpected value returned from join()")
 //! }
 //!
-//! let h = Context::<Expected>::new().spawn_quiet(|| {
+//! let ctx = Context::<Expected>::new();
+//! let h = ctx.spawn_quiet(|| {
 //!     let h = spawn_quiet(|| {
 //!         panic!("Sup dawg, we heard you like panics \
 //!                 so we put a panic in your panic!");
@@ -123,7 +125,7 @@ use std::sync::{Once, ONCE_INIT};
 /// Enumerates the expected outcomes from joining a panic-checked thread.
 ///
 /// `Outcome` values are returned in the successful result variant
-/// of the `join` method of a `CheckedJoinHandle`.
+/// of the `join()` method of a `CheckedJoinHandle`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Outcome<T, P> {
     /// Indicates that the thread closure has
@@ -310,7 +312,7 @@ impl<P: Any> Context<P> {
     ///
     /// # Panics
     ///
-    /// Panics if the underlying call to `std::thread::Builder::spawn`
+    /// Panics if the underlying call to `std::thread::Builder::spawn()`
     /// returns an `Err` value. Any panics that function can cause apply
     /// as well.
     ///
