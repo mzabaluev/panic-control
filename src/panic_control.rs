@@ -120,7 +120,7 @@ use std::thread;
 use std::sync::{Once, ONCE_INIT};
 
 
-/// Enumerates the expected outcomes from joining a controlled thread.
+/// Enumerates the expected outcomes from joining a panic-checked thread.
 ///
 /// `Outcome` values are returned in the successful result variant
 /// of the `join` method of a `CheckedJoinHandle`.
@@ -129,7 +129,7 @@ pub enum Outcome<T, P> {
     /// Indicates that the thread closure has
     /// returned normally and provides the return value.
     NoPanic(T),
-    /// Indicates that the thread has panicked with expected parameter type
+    /// Indicates that the thread has panicked with the expected type
     /// and provides the panic value.
     Panicked(P)
 }
@@ -296,8 +296,8 @@ impl<P: Any> Context<P> {
     /// assert_eq!(outcome, Outcome::Panicked(Expected(42)));
     /// ```
     ///
-    /// A way to avoid the future incompatibility without relying on
-    /// warning overrides is to match the `Outcome` value without
+    /// A way to avoid the future incompatibility without resorting
+    /// to warning overrides is to match the `Outcome` value without
     /// touching the sensitive parts:
     ///
     /// ```
