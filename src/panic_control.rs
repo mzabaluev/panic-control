@@ -87,11 +87,15 @@
 //!     let unwind_me = TypeUnderTest::new();
 //!     assert!(unwind_me.doing_fine());
 //!          // ^-- If this fails, join will return Err
-//!     panic!(Expected::Token);
-//!     ()
+//!     panic!(Expected::String("Rainbows and unicorns!".into()));
 //! });
 //! let outcome = h.join().unwrap_or_propagate();
-//! assert_eq!(outcome, Outcome::Panicked(Expected::Token));
+//! match outcome {
+//!     Outcome::Panicked(Expected::String(s)) => {
+//!         println!("thread panicked as expected: {}", s);
+//!     }
+//!     _ => panic!("unexpected value returned from join()")
+//! }
 //!
 //! let h = Context::<Expected>::new().spawn_quiet(|| {
 //!     let h = spawn_quiet(|| {
@@ -172,19 +176,18 @@ impl<T, P: Any> ControlledJoinHandle<T, P> {
     /// struct Expected(pub u32);
     ///
     /// let ctx = Context::<Expected>::new();
-    ///
-    /// // Have to help the compiler here: without the unreachable
-    /// // return value, it will default the first type parameter of
-    /// // Outcome to ! when feature(never_type) lands, but for now
-    /// // it lints on Rust issue #39216.
-    /// #[allow(unreachable_code)]
     /// let h = ctx.spawn(|| {
     ///     panic!(Expected(42));
-    ///     ()
     /// });
     ///
     /// let outcome = h.join().unwrap();
-    /// assert_eq!(outcome, Outcome::Panicked(Expected(42)));
+    ///
+    /// match outcome {
+    ///     Outcome::Panicked(Expected(n)) => {
+    ///         println!("thread panicked as expected with {}", n);
+    ///     }
+    ///     _ => panic!("unexpected return value from join()")
+    /// }
     /// ```
     pub fn join(self) -> thread::Result<Outcome<T, P>> {
         match self.thread_handle.join() {
@@ -232,6 +235,61 @@ impl<P: Any> Context<P> {
         }
     }
 
+    /// # Examples
+    ///
+    /// The example below uses some kludges to work around a compiler
+    /// quirk:
+    ///
+    /// ```
+    /// # use panic_control::{Context, Outcome};
+    /// # #[derive(Debug, PartialEq)] struct Expected(pub i32);
+    /// let ctx = Context::<Expected>::new();
+    ///
+    /// #[allow(unreachable_code)]
+    /// let h = ctx.spawn(|| {
+    ///     panic!(Expected(42));
+    ///     ()
+    /// });
+    ///
+    /// let outcome = h.join().unwrap();
+    /// assert_eq!(outcome, Outcome::Panicked(Expected(42)));
+    /// ```
+    ///
+    /// Note that without the unreachable return expression, the compiler
+    /// will have no information to infer the unspecified first type
+    /// parameter of `Outcome`, so it will settle on a default type that
+    /// is subject to future change. In preparation to get the `never_type`
+    /// feature stabilized in the compiler, code like this is
+    /// [denied by a lint](https://github.com/rust-lang/rust/issues/39216):
+    ///
+    /// ```compile_fail
+    /// # use panic_control::{Context, Outcome};
+    /// # #[derive(Debug, PartialEq)] struct Expected(pub i32);
+    /// let ctx = Context::<Expected>::new();
+    /// let h = ctx.spawn(|| {
+    ///     panic!(Expected(42));
+    /// });
+    /// let outcome = h.join().unwrap();
+    /// assert_eq!(outcome, Outcome::Panicked(Expected(42)));
+    /// ```
+    ///
+    /// A way to avoid the future incompatibility without relying on
+    /// warning overrides is to match the `Outcome` value without
+    /// touching the sensitive parts:
+    ///
+    /// ```
+    /// # use panic_control::{Context, Outcome};
+    /// # #[derive(Debug, PartialEq)] struct Expected(pub i32);
+    /// let ctx = Context::<Expected>::new();
+    /// let h = ctx.spawn(|| {
+    ///     panic!(Expected(42));
+    /// });
+    /// let outcome = h.join().unwrap();
+    /// match outcome {
+    ///     Outcome::Panicked(Expected(n)) => assert_eq!(n, 42),
+    ///     _ => panic!("join() returned an unexpected Outcome value")
+    /// }
+    /// ```
     pub fn spawn<T, F>(self, f: F) -> ControlledJoinHandle<T, P>
         where F: FnOnce() -> T,
               F: Send + 'static,
@@ -404,19 +462,17 @@ mod tests {
     }
 
     #[test]
-    // Have to help the compiler here: without an unreachable return value,
-    // it has troubles inferring the no-panic type parameter of Outcome
-    // and lints on Rust issue #39216.
-    #[allow(unreachable_code)]
     fn expected_panic() {
         silence_expected_panics();
         let ctx = Context::<Expected>::new();
         let h = ctx.spawn(|| {
             panic!(Expected(42));
-            ()
         });
         let outcome = h.join().unwrap();
-        assert_eq!(outcome, Outcome::Panicked(Expected(42)));
+        match outcome {
+            Outcome::Panicked(Expected(n)) => assert_eq!(n, 42),
+            _ => panic!("unexpected Outcome value returned from join()")
+        }
     }
 
     #[test]
