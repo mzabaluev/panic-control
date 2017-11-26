@@ -1,4 +1,4 @@
-# Controlled Panics Using the Type System
+# Controlled Rust Panics Using Dynamic Type Checking
 
 The `panic_control` crate provides utilities to test code behaviors in
 intentionally caused panics, while discriminating between the expected
