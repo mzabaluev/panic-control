@@ -44,7 +44,7 @@
 //! to be usable in testing, it should also implement at least `Debug` and
 //! `PartialEq`.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```
 //! use panic_control::{Context, Outcome};
@@ -174,7 +174,7 @@ impl<T, P: Any> CheckedJoinHandle<T, P> {
     /// closure returns normally, its return value is returned in
     /// `Ok(Outcome::NoPanic(_))`
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use panic_control::{Context, Outcome};
@@ -397,7 +397,7 @@ impl<P: Any> Context<P> {
     /// See the documentation on the function
     /// `disable_hook_in_current_thread()` for possible pitfalls.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use panic_control::{Context, Outcome};
