@@ -694,6 +694,19 @@ pub fn chain_hook_ignoring_full<F>(predicate: F)
           F: Sync,
           F: 'static
 {
+    // Make sure the thread filter hook is set up,
+    // in case some other thread is calling
+    // {disable,enable}_hook_in_current_thread()
+    init_thread_filter_hook();
+    chain_hook_waive_init_thread_filter(predicate)
+}
+
+fn chain_hook_waive_init_thread_filter<F>(predicate: F)
+    where F: Fn(&PanicInfo) -> bool,
+          F: Send,
+          F: Sync,
+          F: 'static
+{
     let next_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
             if !predicate(info) {
@@ -707,7 +720,8 @@ thread_local!(static IGNORE_HOOK: Cell<bool> = Cell::new(false));
 fn init_thread_filter_hook() {
     static HOOK_ONCE: Once = ONCE_INIT;
     HOOK_ONCE.call_once(|| {
-        chain_hook_ignoring_full(|_| {
+        // Avoid recursion and deadlocking on HOOK_ONCE here
+        chain_hook_waive_init_thread_filter(|_| {
             IGNORE_HOOK.with(|cell| { cell.get() })
         });
     });
