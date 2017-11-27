@@ -535,10 +535,100 @@ impl<T> ThreadResultExt<T> for thread::Result<T> {
     }
 }
 
+/// Augments the panic hook, filtering out panics of a particular type.
+///
+/// The current panic hook, either installed with `std::panic::set_hook()`
+/// or the standard library default, is chained, again using
+/// `std::panic::set_hook()`, behind
+/// a dynamic type check for the panic payload. If it is found to be
+/// of the same type as the type parameter of this generic function,
+/// the chained hook is not called.
+///
+/// # Caveats
+///
+/// Every call to this function allocates state data and increases the
+/// filtering chain for the process-global panic hook, so it should not be
+/// called repeatedly unless necessary.
+/// Other code within the program that modifies the panic hook concurrently
+/// to or after a call to this function may cause the hook chain to stop
+/// working as intended.
+/// This function only interoperates with the other functions and methods
+/// in this crate that modify the panic hook, and only when used in strictly
+/// serialized order with those functions. This function is only intended to be
+/// used in tests or initialization code of a program; other libraries
+/// should avoid using it.
+///
+/// # Examples
+///
+/// ```
+/// use panic_control::chain_hook_ignoring;
+/// use std::sync::{Once, ONCE_INIT};
+///
+/// #[derive(Debug, PartialEq, Eq)]
+/// struct PanicToken;
+///
+/// #[derive(Debug, PartialEq, Eq)]
+/// struct PanicMessage(pub String);
+///
+/// static HOOK_ONCE: Once = ONCE_INIT;
+/// HOOK_ONCE.call_once(|| {
+///     chain_hook_ignoring::<PanicToken>();
+///     chain_hook_ignoring::<PanicMessage>();
+/// });
+/// ```
 pub fn chain_hook_ignoring<P: 'static>() {
     chain_hook_ignoring_if(|_: &P| { true })
 }
 
+/// Augments the panic hook, filtering out panics with a
+/// statically typed closure.
+///
+/// The current panic hook, either installed with `std::panic::set_hook()`
+/// or the standard library default, is chained, again using
+/// `std::panic::set_hook()`, behind
+/// the boolean predicate closure passed as the parameter, testing a value
+/// of a particular type.
+/// If the panic payload is found to be of the same type and the predicate
+/// returns true, the chained hook is not called.
+///
+/// # Caveats
+///
+/// Every call to this function allocates state data and increases the
+/// filtering chain for the process-global panic hook, so it should not be
+/// called repeatedly unless necessary.
+/// Other code within the program that modifies the panic hook concurrently
+/// to or after a call to this function may cause the hook chain to stop
+/// working as intended.
+/// This function only interoperates with the other functions and methods
+/// in this crate that modify the panic hook, and only when used in strictly
+/// serialized order with those functions. This function is only intended to be
+/// used in tests or initialization code of a program; other libraries
+/// should avoid using it.
+///
+/// # Examples
+///
+/// The value types most commonly used in panics are `&'string str` or
+/// `String`, depending on whether the `panic!` macro was used in the single
+/// parameter form or the formatting form, respectively. The example below
+/// filters out either kind if the string message contains a particular
+/// substring.
+///
+/// ```
+/// use panic_control::chain_hook_ignoring_if;
+/// use std::sync::{Once, ONCE_INIT};
+///
+/// const MAGIC: &str = "Move along, nothing to see here";
+///
+/// static HOOK_ONCE: Once = ONCE_INIT;
+/// HOOK_ONCE.call_once(|| {
+///     chain_hook_ignoring_if(|s: &&'static str| {
+///         s.contains(MAGIC)
+///     });
+///     chain_hook_ignoring_if(|s: &String| {
+///         s.contains(MAGIC)
+///     });
+/// });
+/// ```
 pub fn chain_hook_ignoring_if<P, F>(predicate: F)
     where F: Fn(&P) -> bool,
           F: Send,
@@ -554,6 +644,46 @@ pub fn chain_hook_ignoring_if<P, F>(predicate: F)
     })
 }
 
+/// Augments the panic hook, filtering out panics with a free-form check.
+///
+/// The current panic hook, either installed with `std::panic::set_hook()`
+/// or the standard library default, is chained, again using
+/// `std::panic::set_hook()`, behind
+/// the boolean predicate closure passed as the parameter, testing the
+/// `std::panic::PanicInfo` structure passed to the panic hook.
+/// If the predicate returns true, the chained hook is not called.
+///
+/// # Caveats
+///
+/// Every call to this function allocates state data and increases the
+/// filtering chain for the process-global panic hook, so it should not be
+/// called repeatedly unless necessary.
+/// Other code within the program that modifies the panic hook concurrently
+/// to or after a call to this function may cause the hook chain to stop
+/// working as intended.
+/// This function only interoperates with the other functions and methods
+/// in this crate that modify the panic hook, and only when used in strictly
+/// serialized order with those functions. This function is only intended to be
+/// used in tests or initialization code of a program; other libraries
+/// should avoid using it.
+///
+/// # Examples
+///
+/// This example filters out any non-string panics:
+///
+/// ```
+/// use panic_control::chain_hook_ignoring_full;
+/// use std::sync::{Once, ONCE_INIT};
+///
+/// static HOOK_ONCE: Once = ONCE_INIT;
+/// HOOK_ONCE.call_once(|| {
+///     chain_hook_ignoring_full(|info| {
+///         let payload = info.payload();
+///         !(payload.is::<&'static str>() ||
+///           payload.is::<String>())
+///     });
+/// });
+/// ```
 pub fn chain_hook_ignoring_full<F>(predicate: F)
     where F: Fn(&PanicInfo) -> bool,
           F: Send,
