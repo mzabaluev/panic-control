@@ -10,8 +10,8 @@
 
 //! Controlled panics using dynamic type checking.
 //!
-//! Sometimes there is a need to test how Rust code behaves under unwinding,
-//! to which end a panic can be caused on purpose in a thread spawned by the
+//! Sometimes there is a need to test how Rust code behaves on occurrence
+//! of a panic. A panic can be invoked on purpose in a thread spawned by the
 //! test and the effects observed after the thread is joined.
 //! The problem with "benign" panics is that it may be cumbersome to tell them
 //! apart from panics indicating actual errors, such as assertion failures.
@@ -19,9 +19,10 @@
 //! Another issue is the behavior of the default panic hook.
 //! It is very useful for getting information about the cause of an
 //! unexpected thread panic, but for tests causing panics on purpose it
-//! creates annoying output noise. Custom panic hooks affect the entire
-//! program, which often is the test runner; it is easy to misuse them
-//! causing important error information to go unreported.
+//! produces annoying output noise. The panic hook can be overridden,
+//! but custom panic hooks affect the entire program, which often is
+//! the test runner; it is easy to misuse them causing important error
+//! information to go unreported.
 //!
 //! The simplest way, as provided by the standard library, to propagate
 //! a panic that occurred in a child thread to the thread that spawned it
@@ -64,7 +65,7 @@
 //! // initialization and the tests are run in parallel in a random
 //! // order by default. So this is our solution, to be called at
 //! // the beginning of every test exercising a panic with an
-//! // Expected value.
+//! // Expected value, or using spawn_quiet() to launch a thread.
 //! fn silence_expected_panics() {
 //!     use std::sync::{Once, ONCE_INIT};
 //!     static HOOK_ONCE: Once = ONCE_INIT;
@@ -129,9 +130,9 @@ use std::sync::{Once, ONCE_INIT};
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Outcome<T, P> {
     /// Indicates that the thread closure has
-    /// returned normally and provides the return value.
+    /// returned normally, and provides the return value.
     NoPanic(T),
-    /// Indicates that the thread has panicked with the expected type
+    /// Indicates that the thread has panicked with the expected type,
     /// and provides the panic value.
     Panicked(P)
 }
@@ -149,8 +150,8 @@ impl<T, P> Outcome<T, P> {
 /// Wraps `std::thread::JoinHandle` for panic value discrimination.
 ///
 /// A `CheckedJoinHandle` works like a standard `JoinHandle`,
-/// except that its `join()` method checks the type of the possible
-/// panic value dynamically for a downcast to the type that is the
+/// except that its `join()` method dynamically checks the type of
+/// the possible panic value for matching the type that is the
 /// parameter of the `Context` this handle was obtained from,
 /// and if the type matches, returns the resolved value in the
 /// "successful panic" result variant.
@@ -450,7 +451,7 @@ impl<P: Any> From<thread::Builder> for Context<P> {
 /// any `Result` value that matches the specialization of
 /// `std::thread::Result` with methods that facilitate
 /// examination and reporting of the possible string value
-/// which is often found in the dynamically typed
+/// which is most often found in the dynamically typed
 /// `Err` variant. The methods are meant to be used on the
 /// result of `std::thread::JoinHandle::join()` or
 /// `CheckedJoinHandle::join()`.
@@ -549,14 +550,15 @@ impl<T> ThreadResultExt<T> for thread::Result<T> {
 /// Every call to this function allocates state data and increases the
 /// filtering chain for the process-global panic hook, so it should not be
 /// called repeatedly unless necessary.
-/// Other code within the program that modifies the panic hook concurrently
-/// to or after a call to this function may cause the hook chain to stop
+/// Other code within the program that modifies the panic hook, concurrently
+/// to, or after, the call to this function, may cause the hook chain to stop
 /// working as intended.
-/// This function only interoperates with the other functions and methods
-/// in this crate that modify the panic hook, and only when used in strictly
-/// serialized order with those functions. This function is only intended to be
-/// used in tests or initialization code of a program; other libraries
-/// should avoid using it.
+/// This function interoperates in a predictable way only with the other
+/// functions and methods in this crate that modify the panic hook,
+/// and only when used in strictly serialized order with those functions,
+/// unless said otherwise in those functions' documentation.
+/// This function is only intended to be used in tests or initialization
+/// code of a program; other libraries should avoid using it.
 ///
 /// # Examples
 ///
@@ -596,14 +598,15 @@ pub fn chain_hook_ignoring<P: 'static>() {
 /// Every call to this function allocates state data and increases the
 /// filtering chain for the process-global panic hook, so it should not be
 /// called repeatedly unless necessary.
-/// Other code within the program that modifies the panic hook concurrently
-/// to or after a call to this function may cause the hook chain to stop
+/// Other code within the program that modifies the panic hook, concurrently
+/// to, or after, the call to this function, may cause the hook chain to stop
 /// working as intended.
-/// This function only interoperates with the other functions and methods
-/// in this crate that modify the panic hook, and only when used in strictly
-/// serialized order with those functions. This function is only intended to be
-/// used in tests or initialization code of a program; other libraries
-/// should avoid using it.
+/// This function interoperates in a predictable way only with the other
+/// functions and methods in this crate that modify the panic hook,
+/// and only when used in strictly serialized order with those functions,
+/// unless said otherwise in those functions' documentation.
+/// This function is only intended to be used in tests or initialization
+/// code of a program; other libraries should avoid using it.
 ///
 /// # Examples
 ///
@@ -658,14 +661,15 @@ pub fn chain_hook_ignoring_if<P, F>(predicate: F)
 /// Every call to this function allocates state data and increases the
 /// filtering chain for the process-global panic hook, so it should not be
 /// called repeatedly unless necessary.
-/// Other code within the program that modifies the panic hook concurrently
-/// to or after a call to this function may cause the hook chain to stop
+/// Other code within the program that modifies the panic hook, concurrently
+/// to, or after, the call to this function, may cause the hook chain to stop
 /// working as intended.
-/// This function only interoperates with the other functions and methods
-/// in this crate that modify the panic hook, and only when used in strictly
-/// serialized order with those functions. This function is only intended to be
-/// used in tests or initialization code of a program; other libraries
-/// should avoid using it.
+/// This function interoperates in a predictable way only with the other
+/// functions and methods in this crate that modify the panic hook,
+/// and only when used in strictly serialized order with those functions,
+/// unless said otherwise in those functions' documentation.
+/// This function is only intended to be used in tests or initialization
+/// code of a program; other libraries should avoid using it.
 ///
 /// # Examples
 ///
