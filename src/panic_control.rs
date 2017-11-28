@@ -305,11 +305,12 @@ impl<P: Any> Context<P> {
     }
 
     /// Spawns a new thread taking ownership of the `Context`, and
-    /// returns the `CheckedJoinHandle` to the thread. This method behaves
-    /// exactly like the `spawn()` method of `std::thread::Builder` does,
-    /// and if the `Context` was constructed from `std::thread::Builder`,
-    /// will use its thread configuration, except that an OS failure to
-    /// create a thread will cause panic.
+    /// returns the `CheckedJoinHandle` for the thread. Other than the
+    /// return value, and panicking on an OS failure to create a thread,
+    /// this method behaves exactly like the `spawn()`
+    /// method of `std::thread::Builder` does, and if the `Context`
+    /// was constructed from a `std::thread::Builder`, its
+    /// thread configuration will be applied.
     ///
     /// # Panics
     ///
@@ -384,8 +385,16 @@ impl<P: Any> Context<P> {
         }
     }
 
-    /// Like `spawn()`, but suppresses calls to the current panic hook
-    /// if any panic occurs in the spawned thread.
+    /// Like `spawn()`, but disables the panic hook
+    /// if the spawned thread panics.
+    ///
+    /// The process-global panic hook, either installed with
+    /// `std::panic::set_hook()` or the standard library default,
+    /// gets augmented with a filter that disables invocation of the
+    /// hook closure if the spawned thread panics.
+    ///
+    /// This function can be used in any order together with other
+    /// functions and methods of this crate that modify the panic hook.
     ///
     /// # Caveats
     ///
@@ -395,10 +404,11 @@ impl<P: Any> Context<P> {
     /// The only remaining way to observe the panic is by checking
     /// the result of `join()` for the spawned thread.
     ///
-    /// If other Rust code in the process modifies the panic hook after
-    /// this method has been called, the suppression may be undone.
-    /// See the documentation on the function
-    /// `disable_hook_in_current_thread()` for possible pitfalls.
+    /// Other code within the program that modifies the panic hook,
+    /// concurrently to, or after, a call to this function, may cause
+    /// the suppression not to work as intended. See the documentation
+    /// on the function `disable_hook_in_current_thread()` for possible
+    /// pitfalls.
     ///
     /// # Examples
     ///
@@ -407,7 +417,8 @@ impl<P: Any> Context<P> {
     /// # #[derive(Debug, PartialEq)] struct Expected(pub i32);
     /// let ctx = Context::<Expected>::new();
     /// let h = ctx.spawn_quiet(|| {
-    ///     assert!(false, "you can only know about it through join()");
+    ///     assert!(false, "I'm panicking, \
+    ///         but you can only learn about it through join()");
     /// });
     /// let res = h.join();
     /// assert!(res.is_err());
@@ -539,7 +550,7 @@ impl<T> ThreadResultExt<T> for thread::Result<T> {
 /// Augments the panic hook, filtering out panics of a particular type.
 ///
 /// The current panic hook, either installed with `std::panic::set_hook()`
-/// or the standard library default, is chained, again using
+/// or the standard library default, gets chained, again using
 /// `std::panic::set_hook()`, behind
 /// a dynamic type check for the panic payload. If it is found to be
 /// of the same type as the type parameter of this generic function,
@@ -554,11 +565,13 @@ impl<T> ThreadResultExt<T> for thread::Result<T> {
 /// to, or after, the call to this function, may cause the hook chain to stop
 /// working as intended.
 /// This function interoperates in a predictable way only with the other
-/// functions and methods in this crate that modify the panic hook,
+/// functions and methods of this crate that modify the panic hook,
 /// and only when used in strictly serialized order with those functions,
-/// unless said otherwise in those functions' documentation.
+/// unless noted otherwise in those functions' documentation.
 /// This function is only intended to be used in tests or initialization
-/// code of a program; other libraries should avoid using it.
+/// code of a program;
+/// libraries other than those designed for test purposes should avoid
+/// using it.
 ///
 /// # Examples
 ///
@@ -586,7 +599,7 @@ pub fn chain_hook_ignoring<P: 'static>() {
 /// statically typed closure.
 ///
 /// The current panic hook, either installed with `std::panic::set_hook()`
-/// or the standard library default, is chained, again using
+/// or the standard library default, gets chained, again using
 /// `std::panic::set_hook()`, behind
 /// the boolean predicate closure passed as the parameter, testing a value
 /// of a particular type.
@@ -602,11 +615,13 @@ pub fn chain_hook_ignoring<P: 'static>() {
 /// to, or after, the call to this function, may cause the hook chain to stop
 /// working as intended.
 /// This function interoperates in a predictable way only with the other
-/// functions and methods in this crate that modify the panic hook,
+/// functions and methods of this crate that modify the panic hook,
 /// and only when used in strictly serialized order with those functions,
-/// unless said otherwise in those functions' documentation.
+/// unless noted otherwise in those functions' documentation.
 /// This function is only intended to be used in tests or initialization
-/// code of a program; other libraries should avoid using it.
+/// code of a program;
+/// libraries other than those designed for test purposes should avoid
+/// using it.
 ///
 /// # Examples
 ///
@@ -650,7 +665,7 @@ pub fn chain_hook_ignoring_if<P, F>(predicate: F)
 /// Augments the panic hook, filtering out panics with a free-form check.
 ///
 /// The current panic hook, either installed with `std::panic::set_hook()`
-/// or the standard library default, is chained, again using
+/// or the standard library default, gets chained, again using
 /// `std::panic::set_hook()`, behind
 /// the boolean predicate closure passed as the parameter, testing the
 /// `std::panic::PanicInfo` structure passed to the panic hook.
@@ -665,11 +680,13 @@ pub fn chain_hook_ignoring_if<P, F>(predicate: F)
 /// to, or after, the call to this function, may cause the hook chain to stop
 /// working as intended.
 /// This function interoperates in a predictable way only with the other
-/// functions and methods in this crate that modify the panic hook,
+/// functions and methods of this crate that modify the panic hook,
 /// and only when used in strictly serialized order with those functions,
-/// unless said otherwise in those functions' documentation.
+/// unless noted otherwise in those functions' documentation.
 /// This function is only intended to be used in tests or initialization
-/// code of a program; other libraries should avoid using it.
+/// code of a program;
+/// libraries other than those designed for test purposes should avoid
+/// using it.
 ///
 /// # Examples
 ///
@@ -727,6 +744,30 @@ fn init_thread_filter_hook() {
     });
 }
 
+/// Disables the panic hook for the current thread.
+///
+/// The process-global panic hook, either installed with
+/// `std::panic::set_hook()` or the standard library default,
+/// gets augmented with a filter that disables invocation of the
+/// hook closure if the thread that is calling this function panics.
+///
+/// This function does not allocate resources when called repeatedly in
+/// the same thread, and it can be used in any order together with other
+/// functions and methods of this crate that modify the panic hook.
+///
+/// # Caveats
+///
+/// Note that the suppression can apply to the default panic hook
+/// that is normally used to report assertion failures and other
+/// unexpected panics on the standard error stream.
+///
+/// Other code within the program that modifies the panic hook, concurrently
+/// to, or after, a call to this function, may cause the hook chain to stop
+/// working as intended.
+/// This function interoperates in a predictable way only with the other
+/// functions and methods of this crate that modify the panic hook.
+/// Libraries other than those designed for test purposes should avoid
+/// using this function.
 pub fn disable_hook_in_current_thread() {
     init_thread_filter_hook();
     IGNORE_HOOK.with(|cell| {
@@ -734,6 +775,25 @@ pub fn disable_hook_in_current_thread() {
     });
 }
 
+/// Enables the panic hook for the current thread.
+///
+/// If the panic hook has been disabled for the current thread with
+/// disable_hook_in_current_thread(), calling this function enables it
+/// back.
+///
+/// This function does not allocate resources when called repeatedly in
+/// the same thread, and it can be used in any order together with other
+/// functions and methods of this crate that modify the panic hook.
+///
+/// # Caveats
+///
+/// Other code within the program that modifies the panic hook, concurrently
+/// to, or after, a call to this function, may cause the hook chain to stop
+/// working as intended.
+/// This function interoperates only with the other
+/// functions and methods of this crate that modify the panic hook.
+/// Libraries other than those designed for test purposes should avoid
+/// using this function.
 pub fn enable_hook_in_current_thread() {
     init_thread_filter_hook();
     IGNORE_HOOK.with(|cell| {
@@ -741,6 +801,43 @@ pub fn enable_hook_in_current_thread() {
     });
 }
 
+/// Like `std::thread::spawn()`, but disables the panic hook
+/// if the spawned thread panics.
+///
+/// The process-global panic hook, either installed with
+/// `std::panic::set_hook()` or the standard library default,
+/// gets augmented with a filter that disables invocation of the
+/// hook closure if the spawned thread panics.
+///
+/// This function can be used in any order together with other
+/// functions and methods of this crate that modify the panic hook.
+///
+/// # Caveats
+///
+/// Note that the suppression can apply to the default panic hook
+/// that is normally used to report assertion failures and other
+/// unexpected panics on the standard error stream.
+/// The only remaining way to observe the panic is by checking
+/// the result of `join()` for the spawned thread.
+///
+/// Other code within the program that modifies the panic hook,
+/// concurrently to, or after, a call to this function, may cause
+/// the suppression not to work as intended. See the documentation
+/// on the function `disable_hook_in_current_thread()` for possible
+/// pitfalls.
+///
+/// # Examples
+///
+/// ```
+/// use panic_control::spawn_quiet;
+///
+/// let h = spawn_quiet(|| {
+///     assert!(false, "I'm panicking, \
+///         but you can only learn about it through join()");
+/// });
+/// let res = h.join();
+/// assert!(res.is_err());
+/// ```
 pub fn spawn_quiet<T, F>(f: F) -> thread::JoinHandle<T>
     where F: FnOnce() -> T,
           F: Send + 'static,
