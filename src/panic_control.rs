@@ -20,9 +20,9 @@
 //! It is very useful for getting information about the cause of an
 //! unexpected thread panic, but for tests causing panics on purpose it
 //! produces annoying output noise. The panic hook can be overridden,
-//! but custom panic hooks affect the entire program, which often is
-//! the test runner; it is easy to misuse them causing important error
-//! information to go unreported.
+//! but custom panic hooks affect the entire program, which in typical
+//! usage is the test runner; it is easy to misuse them causing important
+//! error information to go unreported.
 //!
 //! The simplest way, as provided by the standard library, to propagate
 //! a panic that occurred in a child thread to the thread that spawned it
@@ -41,9 +41,9 @@
 //! a custom type as the parameter for `panic!`. The type could be as simple
 //! as a token unit-like struct, or it can be equipped to carry additional
 //! information from the panic site.
-//! Any panic value type shall be sized, static, and `Send`. For the value
-//! to be usable in testing, it should also implement at least `Debug` and
-//! `PartialEq`.
+//! Any panic value type shall be `Sized`, `'static`, and `Send`.
+//! For the value to be usable in testing, it should also implement
+//! at least `Debug` and `PartialEq`.
 //!
 //! # Examples
 //!
@@ -65,7 +65,7 @@
 //! // initialization and the tests are run in parallel in a random
 //! // order by default. So this is our solution, to be called at
 //! // the beginning of every test exercising a panic with an
-//! // Expected value, or using spawn_quiet() to launch a thread.
+//! // Expected value.
 //! fn silence_expected_panics() {
 //!     use std::sync::{Once, ONCE_INIT};
 //!     static HOOK_ONCE: Once = ONCE_INIT;
@@ -125,7 +125,7 @@ use std::sync::{Once, ONCE_INIT};
 
 /// Enumerates the expected outcomes from joining a panic-checked thread.
 ///
-/// `Outcome` values are returned in the successful result variant
+/// `Outcome` values are returned in the `Ok` result variant
 /// of the `join()` method of a `CheckedJoinHandle`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Outcome<T, P> {
@@ -246,7 +246,7 @@ impl<T, P> Into<thread::JoinHandle<T>> for CheckedJoinHandle<T, P> {
 /// It can be constructed from an `std::thread::Builder` providing
 /// a customized thread configuration.
 ///
-/// The method `spawn()` is used to spawn a new thread similarly to
+/// The method `spawn()` is used to spawn a new thread, similarly to
 /// how the function `std::thread::spawn()` works. See the documentation
 /// of the `spawn()` method for detailed description and examples.
 ///
@@ -446,10 +446,10 @@ impl<P: Any> From<thread::Builder> for Context<P> {
 
 /// Helpful extension methods for `std::thread::Result`.
 ///
-/// The `Result` type alias defined in `std::thread` is a
+/// The `Result` type defined in `std::thread` is a
 /// specialization of the standard `Result` with a `Box<Any>`
-/// in the `Err` variant, which receives a panic's payload
-/// value.
+/// in the `Err` variant, which receives the payload
+/// value of a panic.
 /// As such, `Result` does not provide convenient ways
 /// to examine the content of the panic value. Furthermore,
 /// the generic implementations of `unwrap()` and related methods
@@ -778,7 +778,7 @@ pub fn disable_hook_in_current_thread() {
 /// Enables the panic hook for the current thread.
 ///
 /// If the panic hook has been disabled for the current thread with
-/// disable_hook_in_current_thread(), calling this function enables it
+/// `disable_hook_in_current_thread()`, calling this function enables it
 /// back.
 ///
 /// This function does not allocate resources when called repeatedly in
