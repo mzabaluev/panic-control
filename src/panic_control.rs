@@ -493,7 +493,7 @@ impl<P: Any> From<thread::Builder> for Context<P> {
 /// println!("{}", msg);
 /// ```
 ///
-pub trait ThreadResultExt<T> {
+pub trait ThreadResultExt<T> : sealed::ThreadResultExtSealed {
 
     /// Unwraps a result, yielding the content of an `Ok`.
     ///
@@ -528,6 +528,16 @@ fn propagate_panic(box_any: Box<Any + Send>) -> ! {
         None => panic!("observed an unexpected thread panic \
                         with undetermined value")
     }
+}
+
+mod sealed {
+    use std::thread;
+
+    // trait ThreadResultExt is sealed by this crate: it should only
+    // make sense for thread::Result.
+
+    pub trait ThreadResultExtSealed { }
+    impl<T> ThreadResultExtSealed for thread::Result<T> { }
 }
 
 impl<T> ThreadResultExt<T> for thread::Result<T> {
