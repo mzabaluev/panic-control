@@ -1,6 +1,6 @@
 [package]
 name = "panic-control"
-version = "0.1.0-dev"
+version = "0.1.0-rc1"
 description = "Utilities to test code with intentional panics"
 authors = ["Mikhail Zabaluev <mikhail.zabaluev@gmail.com>"]
 readme = "README.md"
