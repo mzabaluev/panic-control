@@ -7,6 +7,7 @@ readme = "README.md"
 license = "Apache-2.0/MIT"
 categories = ["development-tools::testing"]
 keywords = ["panic", "testing"]
+repository = "https://github.com/mzabaluev/panic-control"
 
 [badges]
 travis-ci = { repository = "mzabaluev/panic-control" }
