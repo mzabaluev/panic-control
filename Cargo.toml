@@ -11,6 +11,7 @@ repository = "https://github.com/mzabaluev/panic-control"
 
 [badges]
 travis-ci = { repository = "mzabaluev/panic-control" }
+codecov = { repository = "mzabaluev/panic-control" }
 
 [lib]
 path = "src/panic_control.rs"
