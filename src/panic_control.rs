@@ -286,6 +286,10 @@ impl<P> Debug for Context<P>
     }
 }
 
+impl<P: Any> Default for Context<P> {
+    fn default() -> Context<P> { Context::new() }
+}
+
 impl<P: Any> Context<P> {
 
     /// Constructs a context with the default thread configuration.
@@ -882,6 +886,17 @@ mod tests {
     fn no_panic() {
         let ctx = Context::<Expected>::new();
         let h = ctx.spawn(|| {
+            42
+        });
+        let outcome = h.join().unwrap();
+        assert_eq!(outcome, Outcome::NoPanic(42));
+    }
+
+    #[test]
+    fn context_default() {
+        let ctx = Context::<Expected>::default();
+        // Also use spawn_quiet and exercise the normal return path there
+        let h = ctx.spawn_quiet(|| {
             42
         });
         let outcome = h.join().unwrap();
