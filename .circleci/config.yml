@@ -1,0 +1,12 @@
+version: 2
+jobs:
+  test:
+    docker:
+      - image: rust:latest
+    working_directory: /usr/src/crate
+    steps:
+      - checkout
+      - run:
+          command: cargo test --verbose
+          environment:
+            RUSTFLAGS: "-C link-dead-code"
