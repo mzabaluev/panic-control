@@ -22,9 +22,7 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
-  artifacts:
-    paths:
-      - $(find target/cov -type f -print0 | tr '\0' ':')
+  artifacts: true
 
 after_success: |
   # measure code coverage and upload to codecov
