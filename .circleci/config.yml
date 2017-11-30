@@ -10,3 +10,39 @@ jobs:
           command: cargo test --verbose
           environment:
             RUSTFLAGS: "-C link-dead-code"
+      - persist_to_workspace:
+          root: target
+          paths:
+            - debug/panic_control-*
+            - debug/test_*-*
+  coverage:
+    machine: true
+    steps:
+      - checkout
+      - attach_workspace:
+          at: target
+      - run:
+          name: Rerun the tests collecting coverage
+          command: |
+            docker run --rm --security-opt seccomp=unconfined \
+              -v "$PWD":/usr/src/crate --workdir /usr/src/crate \
+              --entrypoint /bin/bash -i ragnaroek/kcov:v33 <<'EOF'
+                for file in ./target/debug/*; do
+                  if test -x $file; then
+                    kcov --verify --exclude-pattern=tests target/coverage \
+                      $file -q
+                  fi
+                done
+            EOF
+      - store_artifacts:
+          path: target/coverage
+          destination: coverage
+
+workflows:
+  version: 2
+  test_and_coverage:
+    jobs:
+      - test
+      - coverage:
+          requires:
+            - test
