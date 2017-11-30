@@ -22,6 +22,9 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
+addons:
+  artifacts: true
+  working_dir: target/cov
 
 after_success: |
   # measure code coverage and upload to codecov
