@@ -22,7 +22,6 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
-addons:
   artifacts:
     paths:
       - $(find target/cov -type f -print0 | tr '\0' ':')
