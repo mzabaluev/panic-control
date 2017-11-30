@@ -40,7 +40,7 @@ after_success: |
   make install DESTDIR=../../kcov-build &&
   cd ../.. &&
   rm -rf kcov-master &&
-  mkdir -p target/cov
+  mkdir -p target/cov &&
   for file in target/debug/{panic_control,test_*}-*[^\.d]; do
     ./kcov-build/usr/local/bin/kcov --verify --exclude-pattern=/.cargo,/usr/lib,tests target/cov "$file"
   done &&
