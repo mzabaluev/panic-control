@@ -23,8 +23,10 @@ addons:
       - binutils-dev
       - libiberty-dev
 addons:
-  artifacts: true
-  working_dir: target/cov
+  artifacts:
+    working_dir: target
+    paths:
+      - $(find cov -type f -print0 | tr '\0' ':')
 
 after_success: |
   # measure code coverage and upload to codecov
