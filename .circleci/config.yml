@@ -37,6 +37,9 @@ jobs:
       - store_artifacts:
           path: target/coverage
           destination: coverage
+      - run:
+          name: Upload to Codecov
+          command: bash <(curl -s https://codecov.io/bash)
 
 workflows:
   version: 2
