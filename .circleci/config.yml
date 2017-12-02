@@ -63,9 +63,13 @@ jobs:
                   $file --quiet
               fi
             done
+            kcov --merge target/coverage-merged target/coverage/*
       - store_artifacts:
           path: target/coverage
           destination: coverage
+      - store_artifacts:
+          path: target/coverage-merged
+          destination: coverage-merged
       - persist_to_workspace:
           root: target
           paths:
