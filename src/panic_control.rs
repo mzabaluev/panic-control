@@ -342,14 +342,15 @@ impl<P: Any> Context<P> {
     /// assert_eq!(outcome, Outcome::Panicked(Expected(42)));
     /// ```
     ///
-    /// Note that without the unreachable return expression, the compiler
-    /// will have no information to infer the unspecified first type
-    /// parameter of `Outcome`, so it will settle on a default type that
-    /// is subject to future change. In preparation to get the `never_type`
-    /// feature stabilized in the compiler, code like this is
-    /// [denied by a lint](https://github.com/rust-lang/rust/issues/39216):
+    /// Note that unless the unreachable return expression is present,
+    /// the compiler would have no information to infer the unspecified
+    /// first type parameter of `Outcome`, so it would settle on a default type
+    /// that is going to be changed to `!` in Rust 1.26. In previous versions
+    /// of the compiler, code that invokes this behavior is
+    /// [denied by a lint](https://github.com/rust-lang/rust/issues/39216),
+    /// so the following example does not compile:
     ///
-    /// ```compile_fail
+    /// ```ignore
     /// # use panic_control::{Context, Outcome};
     /// # #[derive(Debug, PartialEq)] struct Expected(pub i32);
     /// let ctx = Context::<Expected>::new();
